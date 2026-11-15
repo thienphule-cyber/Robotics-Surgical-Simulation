@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UR3e Surgical Simulation Dashboard</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- defer keeps the order: dashboard.js first, then the panels -->
+  <script defer src="js/dashboard.js"></script>
+  <script defer src="js/patient.js"></script>
+  <script defer src="js/robot.js"></script>
+  <script defer src="js/vision.js"></script>
+  <script defer src="js/monitoring.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>UR3e Robotic Surgical Simulation</h1>
+      <span class="subtitle">Vision-guided (IBVS) · simulation only</span>
+    </div>
+    <div class="top-status">
+      <span id="conn-indicator" class="pill pill-warn">Connecting…</span>
+      <span id="phase-badge" class="pill phase-idle">Idle</span>
+      <span class="elapsed">Elapsed <b id="elapsed">00:00</b></span>
+    </div>
+  </header>
+
+  <div id="estop-banner" class="banner" hidden>
+    EMERGENCY STOP ACTIVE <span id="estop-reason"></span>
+  </div>
+
+  <main class="grid">
+    <!-- Patient overview -->
+    <section class="card span-4" id="card-patient">
+      <h2>Patient Overview <span id="vitals-badge" class="pill pill-muted" hidden>simulated mannequin</span></h2>
+      <div class="kv">
+        <span>ID</span><b id="patient-id">—</b>
+        <span>Description</span><b id="patient-desc">—</b>
+        <span>Posture</span><b id="patient-posture">—</b>
+        <span>Surgical region</span>
+        <select id="region-select" aria-label="Surgical region"></select>
+        <span>Site position</span><b id="site-position">—</b>
+      </div>
+      <div id="vitals-grid" class="vitals-grid"></div>
+    </section>
+
+    <!-- Surgical status -->
+    <section class="card span-4" id="card-status">
+      <h2>Surgical Status</h2>
+      <ol id="phase-steps" class="steps"></ol>
+      <p id="status-message" class="status-message"></p>
+      <div class="status-row">
+        <span id="status-chips"></span>
+        <span class="dim">Elapsed <b id="status-elapsed">00:00</b></span>
+      </div>
+    </section>
+
+    <!-- Controls and parameters -->
+    <section class="card span-4" id="card-controls">
+      <h2>Controls</h2>
+      <div class="btn-row">
+        <button class="btn btn-primary" data-command="start" disabled>Start</button>
+        <button class="btn" data-command="pause" disabled>Pause</button>
+        <button class="btn" data-command="resume" disabled>Resume</button>
+        <button class="btn" data-command="stop" disabled>Stop</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-danger" data-command="estop" disabled>E-STOP</button>
+        <button class="btn" data-command="reset_estop" disabled>Reset E-stop</button>
+        <button class="btn btn-ghost" data-command="reset" disabled>Reset procedure</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" data-command="start_recording" disabled>● Record</button>
+        <button class="btn" data-command="stop_recording" disabled>■ Stop recording</button>
+      </div>
+      <h3>Parameters</h3>
+      <div id="config-form" class="config-form"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="config-apply" disabled>Apply</button>
+      </div>
+    </section>
+
+    <!-- Robot monitoring -->
+    <section class="card span-7" id="card-robot">
+      <h2>Robot Monitoring</h2>
+      <div class="robot-top">
+        <table class="table">
+          <thead><tr><th>Joint</th><th>Angle (°)</th><th>Speed (°/s)</th><th>Range ±360°</th></tr></thead>
+          <tbody id="joint-table-body"></tbody>
+        </table>
+        <div class="kv">
+          <span>TCP x (mm)</span><b id="tcp-x">—</b>
+          <span>TCP y (mm)</span><b id="tcp-y">—</b>
+          <span>TCP z (mm)</span><b id="tcp-z">—</b>
+          <span>Sim time (s)</span><b id="sim-time">—</b>
+        </div>
+      </div>
+      <div class="two-col">
+        <div>
+          <h3>Joint angles</h3>
+          <canvas id="robot-chart" class="chart"></canvas>
+        </div>
+        <div>
+          <h3>TCP path (top view)
+            <button id="btn-clear-trail" class="btn btn-ghost btn-small">Clear</button>
+          </h3>
+          <canvas id="tcp-trail" class="chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vision monitoring -->
+    <section class="card span-5" id="card-vision">
+      <h2>Vision Monitoring</h2>
+      <canvas id="vision-canvas" class="vision-canvas"></canvas>
+      <div class="kv">
+        <span>Camera</span><b id="vision-camera">—</b>
+        <span>Features tracked</span><b id="vision-nfeat">—</b>
+        <span>Status</span><b id="vision-status">—</b>
+        <span>FPS</span><b id="vision-fps">—</b>
+        <span>IBVS error (RMS px)</span><b id="vision-error">—</b>
+      </div>
+      <h3>IBVS error</h3>
+      <canvas id="vision-chart" class="chart small"></canvas>
+    </section>
+
+    <!-- Safety monitoring -->
+    <section class="card span-4" id="card-safety">
+      <h2>Safety Monitoring</h2>
+      <div class="kv">
+        <span>State</span><span id="safety-state" class="pill safety-ok">ok</span>
+        <span>Emergency stop</span><b id="safety-estop">Released</b>
+        <span>Violations (count)</span><b id="safety-violations-count">0</b>
+        <span>Min clearance (mm)</span><b id="safety-clearance">—</b>
+      </div>
+      <h3>Current violations</h3>
+      <ul id="safety-violation-list" class="plain-list"></ul>
+      <h3>Clearance (mm)</h3>
+      <canvas id="safety-chart" class="chart small"></canvas>
+    </section>
+
+    <!-- Performance analysis -->
+    <section class="card span-8" id="card-performance">
+      <h2>Performance Analysis</h2>
+      <table class="table">
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody id="perf-body"></tbody>
+      </table>
+      <div class="btn-row">
+        <button class="btn" id="btn-download-session">Download session (JSON)</button>
+      </div>
+    </section>
+
+    <!-- Operation logs -->
+    <section class="card span-12" id="card-logs">
+      <h2>Operation Logs</h2>
+      <div class="log-toolbar">
+        <label>Level
+          <select id="log-level">
+            <option value="debug">All</option>
+            <option value="info">Info and above</option>
+            <option value="warning">Warnings and above</option>
+            <option value="error">Errors only</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="log-autoscroll" checked> Auto-scroll</label>
+        <button class="btn btn-ghost btn-small" id="btn-log-clear">Clear view</button>
+        <button class="btn btn-ghost btn-small" id="btn-log-csv">Download CSV</button>
+      </div>
+      <div id="log-list" class="log-list"></div>
+    </section>
+  </main>
+
+  <footer class="footer">Simulation only. Not a medical device and not for clinical use.</footer>
+</body>
+</html>
